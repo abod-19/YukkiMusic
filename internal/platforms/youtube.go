@@ -44,7 +44,6 @@ type YouTubePlatform struct {
 }
 
 var (
-	playlistRegex    = regexp.MustCompile(`(?i)(?:list=)([A-Za-z0-9_-]+)`)
 	youtubeLinkRegex = regexp.MustCompile(
 		`(?i)^(?:https?:\/\/)?(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)\/\S+`,
 	)
@@ -82,10 +81,12 @@ func (yp *YouTubePlatform) GetTracks(
 	if trimmed == "" {
 		return nil, errors.New("empty query")
 	}
-
 	if youtubeLinkRegex.MatchString(trimmed) {
+		u, err := url.Parse(trimmed)
+		if err == nil {
+			q := u.Query()
 
-		if playlistRegex.MatchString(trimmed) {
+    if q.Get("list") != "" && q.Get("v") == "" {
 			cacheKey := "playlist:" + strings.ToLower(trimmed)
 			if cached, ok := youtubeCache.Get(cacheKey); ok {
 				return updateCached(cached, video), nil
@@ -145,6 +146,7 @@ func (yp *YouTubePlatform) GetTracks(
 		youtubeCache.Set("track:"+videoID, trackList)
 		return updateCached(trackList, video), nil
 	}
+		}
 
 	tracks, err := yp.VideoSearch(trimmed, true)
 	if err != nil {
@@ -459,44 +461,59 @@ func (yp *YouTubePlatform) VideoSearch(
 }
 
 func (yt *YouTubePlatform) normalizeYouTubeURL(
-	input string,
+        input string,
 ) (string, string, error) {
-	u, err := url.Parse(strings.TrimSpace(input))
-	if err != nil {
-		return "", "", err
-	}
+        u, err := url.Parse(strings.TrimSpace(input))
+        if err != nil {
+                return "", "", err
+        }
 
-	host := strings.ToLower(u.Host)
-	path := strings.Trim(u.Path, "/")
+        host := strings.ToLower(u.Host)
+        path := strings.Trim(u.Path, "/")
 
-	if strings.Contains(host, "youtu.be") {
-		id := strings.Split(path, "/")[0]
-		if len(id) == 11 {
-			return "https://www.youtube.com/watch?v=" + id, id, nil
-		}
-	}
+        if host == "youtu.be" {
+                id := strings.Split(path, "/")[0]
+                if len(id) == 11 {
+                        return "https://www.youtube.com/watch?v=" + id, id, nil
+                }
+        }
 
-	if strings.Contains(host, "youtube.com") {
-		if v := u.Query().Get("v"); len(v) == 11 {
-			return "https://www.youtube.com/watch?v=" + v, v, nil
-		}
+        if host == "youtube.com" ||
+                host == "www.youtube.com" ||
+                host == "m.youtube.com" ||
+                host == "music.youtube.com" {
 
-		parts := strings.Split(path, "/")
+                if v := u.Query().Get("v"); len(v) == 11 {
+                        return "https://www.youtube.com/watch?v=" + v, v, nil
+                }
 
-		if len(parts) >= 2 && parts[0] == "shorts" && len(parts[1]) == 11 {
-			return "https://www.youtube.com/watch?v=" + parts[1], parts[1], nil
-		}
+                parts := strings.Split(path, "/")
 
-		if len(parts) >= 3 && parts[0] == "source" && len(parts[1]) == 11 {
-			return "https://www.youtube.com/watch?v=" + parts[1], parts[1], nil
-		}
+                if len(parts) >= 2 {
+                        id := parts[1]
 
-		if len(parts) >= 2 && parts[0] == "embed" && len(parts[1]) == 11 {
-			return "https://www.youtube.com/watch?v=" + parts[1], parts[1], nil
-		}
-	}
+                        switch parts[0] {
+                        case "shorts":
+                                if len(id) == 11 {
+                                        return "https://www.youtube.com/watch?v=" + id, id, nil
+                                }
+                        case "embed":
+                                if len(id) == 11 {
+                                        return "https://www.youtube.com/watch?v=" + id, id, nil
+                                }
+                        case "live":
+                                if len(id) == 11 {
+                                        return "https://www.youtube.com/watch?v=" + id, id, nil
+                                }
+                        case "v":
+                                if len(id) == 11 {
+                                        return "https://www.youtube.com/watch?v=" + id, id, nil
+                                }
+                        }
+                }
+        }
 
-	return "", "", errors.New("unsupported YouTube URL or missing video ID")
+        return "", "", errors.New("unsupported YouTube URL or missing video ID")
 }
 
 func getPlaylist(pUrl string) ([]string, error) {
