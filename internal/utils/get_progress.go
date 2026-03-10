@@ -41,7 +41,7 @@ func GetProgress(mystic *telegram.NewMessage) *telegram.ProgressManager {
 
 	pm.WithCallback(func(pi *telegram.ProgressInfo) {
     text := fmt.Sprintf(
-        "<b>📥 Downloading</b>\n\n"+
+        "<b>📥 Downloading your track...</b>\n"+
             "<pre>"+
             "Progress : %6.2f%%\n"+
             "Speed    : %s\n"+
