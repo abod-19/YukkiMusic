@@ -182,12 +182,17 @@ func handleQueue(m *tg.NewMessage, cplay bool) error {
 
 	queue := r.Queue()
 	q := len(queue)
+useQuote := q >= 3
+		
 
 	if q > 0 {
 		b.WriteString(F(chatID, "queue_up_next"))
-		b.WriteString("\n\n")
+		n := "\n"
+if !useQuote {
+    n += "\n"
+}
+b.WriteString(n)
 
-		useQuote := q >= 3
 		if useQuote {
 			b.WriteString("<blockquote>")
 		}
