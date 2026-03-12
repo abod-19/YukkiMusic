@@ -25,7 +25,7 @@ import (
 	"fmt"
 
 	"github.com/Laky-64/gologging"
-	"github.com/go-resty/resty/v2"
+	"resty.dev/v3"
 )
 
 const batbinBaseURL = "https://batbin.me/"
