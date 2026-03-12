@@ -28,6 +28,7 @@ import (
 
 	tg "github.com/amarnathcjd/gogram/telegram"
 
+	state "main/internal/core/models"
 	"main/internal/locales"
 	"main/internal/utils"
 )
@@ -54,6 +55,19 @@ func init() {
 • <code>/remove</code> - Remove specific track
 • <code>/clear</code> - Clear all tracks
 • <code>/move</code> - Reorder tracks`
+
+	helpTexts["/restore"] = `<i>Restore a previously cleared music queue.</i>
+
+<u>Usage:</u>
+<b>/restore</b> — Recover tracks
+
+<b>⚙️ Behavior:</b>
+• Recovers tracks cleared by the last <code>/clear</code> command
+• Only works if no new songs have been added since the clear
+• Restored tracks are appended to the current queue
+
+<b>🔒 Restrictions:</b>
+• Only <b>chat admins</b> or <b>authorized users</b> can use this`
 
 	helpTexts["/remove"] = `<i>Remove a specific track from the queue.</i>
 
@@ -90,8 +104,8 @@ func init() {
 <b>🔒 Restrictions:</b>
 • Only <b>chat admins</b> or <b>authorized users</b> can use this
 
-<b>⚠️ Warning:</b>
-This action cannot be undone. Use <code>/remove</code> for selective removal.`
+<b>💡 Tips:</b>
+If you cleared the queue by mistake, use <code>/restore</code> or <code>/crestore</code> immediately to recover it (before adding any new songs).`
 
 	helpTexts["/move"] = `<i>Reorder tracks in the queue.</i>
 
@@ -146,6 +160,14 @@ func clearHandler(m *tg.NewMessage) error {
 
 func cclearHandler(m *tg.NewMessage) error {
 	return handleClear(m, true)
+}
+
+func restoreHandler(m *tg.NewMessage) error {
+	return handleRestoreQueue(m, false)
+}
+
+func crestoreHandler(m *tg.NewMessage) error {
+	return handleRestoreQueue(m, true)
 }
 
 func handleQueue(m *tg.NewMessage, cplay bool) error {
@@ -327,6 +349,41 @@ func handleRemove(m *tg.NewMessage, cplay bool) error {
 	return tg.ErrEndGroup
 }
 
+func handleRestoreQueue(m *tg.NewMessage, cplay bool) error {
+	chatID := m.ChannelID()
+	if !filterAuthUsers(m) {
+		return tg.ErrEndGroup
+	}
+
+	r, err := getEffectiveRoom(m, cplay)
+	if err != nil {
+		m.Reply(err.Error())
+		return tg.ErrEndGroup
+	}
+
+	ok, v := r.GetData("last_queue")
+	if !ok || v == nil {
+		m.Reply(F(chatID, "queue_restore_no_data"))
+		return tg.ErrEndGroup
+	}
+
+	tracks, ok := v.([]*state.Track)
+	if !ok {
+		r.DeleteData("last_queue")
+		m.Reply(F(chatID, "queue_restore_no_data"))
+		return tg.ErrEndGroup
+	}
+
+	r.AddTracksToQueue(tracks)
+	r.DeleteData("last_queue")
+
+	m.Reply(F(chatID, "queue_restored", locales.Arg{
+		"count": len(tracks),
+	}))
+
+	return tg.ErrEndGroup
+}
+
 func handleClear(m *tg.NewMessage, cplay bool) error {
 	chatID := m.ChannelID()
 
@@ -346,10 +403,17 @@ func handleClear(m *tg.NewMessage, cplay bool) error {
 		return tg.ErrEndGroup
 	}
 
+	r.SetData("last_queue", r.Queue())
 	r.RemoveFromQueue(-1)
+
+	restoreCmd := "restore"
+	if cplay {
+		restoreCmd = "crestore"
+	}
 
 	m.Reply(F(chatID, "clear_success", locales.Arg{
 		"user": utils.MentionHTML(m.Sender),
+		"cmd":  restoreCmd,
 	}))
 
 	return tg.ErrEndGroup

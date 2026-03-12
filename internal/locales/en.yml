@@ -210,7 +210,7 @@ bug_report_format: |
   <pre>{report}</pre>
   
 clear_no_active: "⚠️ <b>No active playback or queue to clear.</b>"
-clear_success: "✅ The queue has been cleared by {user}."
+clear_success: "✅ The queue has been cleared by {user}.\n<i>(You can restore it using <code>/{cmd}</code> before adding new songs)</i>"
 
 err_assistant_banned: |
   <b>🚫 Assistant Restricted</b>
@@ -529,6 +529,8 @@ queue_up_next: "⏭️ <b>Up Next:</b>"
 queue_more_line: "\n… and {remaining} more"
 queue_empty_tail: "📭 <i>No more songs in queue.</i>"
 queue_empty: "⚠️ <b>The queue is already empty.</b>"
+queue_restored: "✅ Successfully restored <b>{count}</b> tracks to the queue."
+queue_restore_no_data: "❌ No cleared queue found to restore, or a new song has already been added."
 
 # 🔄 Reload
 reload_start: "⚙️ Reloading admin cache, voice chat status, and assistant status..."
@@ -990,3 +992,4 @@ help_public: |
   <b>/reload</b> - Reload admin or cache data
   <b>/json</b> - Show message JSON structure
   <b>/sudolist</b> - View sudo user list
+
