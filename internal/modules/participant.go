@@ -80,153 +80,128 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 	oldStatus := getParticipantStatus(p.Old)
 	newStatus := getParticipantStatus(p.New)
 
-	gologging.DebugF(
-		"participant change %d: %s -> %s",
-		userID,
-		oldStatus,
-		newStatus,
-	)
+	gologging.DebugF("participant change %d: %s -> %s", userID, oldStatus, newStatus)
 
 	switch {
-
-	case oldStatus == "left" &&
-		(newStatus == "member" || newStatus == "administrator" || newStatus == "creator"):
-
-		if userID == p.Client.Me().ID {
-			handleBotJoin(p, chatID)
-		}
-
-		handleSudoJoin(p, chatID)
-
-	case (oldStatus == "member" || oldStatus == "administrator" || oldStatus == "creator") &&
-		(newStatus == "left" || newStatus == "kicked"):
-
-		if userID == core.BUser.ID {
-			handleBotLeave(p, state, chatID)
-		}
 
 	case (newStatus == "administrator" || newStatus == "creator") &&
 		(oldStatus != "administrator" && oldStatus != "creator"):
 
-		gologging.DebugF("user %d promoted in %d", userID, chatID)
 		utils.AddChatAdmin(p.Client, chatID, userID)
 
 	case oldStatus == "administrator" &&
 		newStatus != "administrator" &&
 		newStatus != "creator":
 
-		gologging.DebugF("user %d demoted in %d", userID, chatID)
-		handleDemotion(p, state, chatID)
+		if userID == core.BUser.ID && config.LeaveOnDemoted {
+
+			core.DeleteRoom(chatID)
+			core.DeleteChatState(chatID)
+
+			p.Client.SendMessage(chatID, F(chatID, "bot_demotion_goodbye"))
+			p.Client.LeaveChannel(chatID)
+
+			if state != nil && state.Assistant != nil {
+				state.Assistant.Client.LeaveChannel(chatID)
+			}
+
+			return nil
+		}
+
+		utils.RemoveChatAdmin(p.Client, chatID, userID)
+
+	case oldStatus == "left" &&
+		(newStatus == "member" || newStatus == "administrator" || newStatus == "creator"):
+
+		handleSudoJoin(p, chatID)
 	}
 
 	if state != nil && userID == state.Assistant.User.ID {
-		handleAssistantEvent(p, state, chatID)
+
+		if p.IsJoined() {
+			state.SetAssistantPresent(true)
+			state.SetAssistantBanned(false)
+			return nil
+		}
+
+		if p.IsLeft() {
+			state.SetAssistantPresent(false)
+			state.SetAssistantBanned(false)
+			return nil
+		}
+
+		if isUserRestricted(p) {
+			handleAssistantRestriction(p, state, chatID)
+			return nil
+		}
+
+		if state.GetAssistantPresence() == nil || state.GetAssistantBanned() == nil {
+			state.RefreshAssistantState()
+		}
 	}
 
 	return nil
 }
 
-func handleBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
-	gologging.Debug("Bot added to " + utils.IntToStr(chatID))
-	p.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
-	database.AddServed(chatID)
-	logBotJoin(p, chatID)
-}
+func handleChatAction(m *telegram.NewMessage) error {
 
-func handleBotLeave(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
-
-	gologging.Debug("Bot left from chat " + utils.IntToStr(chatID))
-
-	if s != nil && s.Assistant != nil {
-		s.Assistant.Client.LeaveChannel(chatID)
+	if !isValidChatType(m) {
+		warnAndLeave(m.Client, m.ChannelID())
+		return telegram.ErrEndGroup
 	}
 
-	core.DeleteRoom(chatID)
-	core.DeleteChatState(chatID)
-	database.DeleteServed(chatID)
+	chatID := m.ChannelID()
+	botID := m.Client.Me().ID
 
-	logBotLeave(p, chatID)
-}
+	switch action := m.Action.(type) {
 
-func handleAssistantEvent(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
+	case *telegram.MessageActionChatAddUser:
 
-	if p.IsJoined() {
-		s.SetAssistantPresent(true)
-		s.SetAssistantBanned(false)
-		return
-	}
+		for _, uid := range action.Users {
 
-	if p.IsLeft() {
-		s.SetAssistantPresent(false)
-		s.SetAssistantBanned(false)
-		return
-	}
+			if uid == botID {
 
-	if isUserRestricted(p) {
-		handleAssistantRestriction(p, s, chatID)
-		return
-	}
+				gologging.Debug("Bot added to " + utils.IntToStr(chatID))
 
-	if s.GetAssistantPresence() == nil || s.GetAssistantBanned() == nil {
-		s.RefreshAssistantState()
-	}
-}
+				m.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
 
-func handleAssistantRestriction(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
+				database.AddServed(chatID)
 
-	if !isTrueBan(p) {
-		s.SetAssistantPresent(true)
-		s.SetAssistantBanned(false)
-		gologging.Debug("Assistant muted in " + utils.IntToStr(chatID))
-		return
-	}
+				if config.LoggerID != 0 {
 
-	gologging.Debug("Assistant banned in " + utils.IntToStr(chatID))
-	s.SetAssistantPresent(false)
-	core.DeleteRoom(chatID)
+					m.Client.SendMessage(
+						config.LoggerID,
+						F(config.LoggerID, "logger_bot_added", buildLogArgs(m, chatID, "added")),
+					)
+				}
 
-	if ok, _ := p.Unban(); ok {
-		s.SetAssistantBanned(false)
-	} else {
-		s.SetAssistantBanned(true)
-		notifyAssistantRestricted(p, s, chatID)
-	}
-}
-
-func handleDemotion(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
-
-	if p.UserID() == core.BUser.ID && config.LeaveOnDemoted {
-
-		core.DeleteRoom(chatID)
-		core.DeleteChatState(chatID)
-
-		p.Client.SendMessage(chatID, F(chatID, "bot_demotion_goodbye"))
-		p.Client.LeaveChannel(chatID)
-
-		if s != nil && s.Assistant != nil {
-			s.Assistant.Client.LeaveChannel(chatID)
+				return nil
+			}
 		}
 
-		return
+	case *telegram.MessageActionChatDeleteUser:
+
+		if action.UserID == botID {
+
+			gologging.Debug("Bot removed from " + utils.IntToStr(chatID))
+
+			core.DeleteRoom(chatID)
+			core.DeleteChatState(chatID)
+			database.DeleteServed(chatID)
+
+			if config.LoggerID != 0 {
+
+				m.Client.SendMessage(
+					config.LoggerID,
+					F(config.LoggerID, "logger_bot_removed", buildLogArgs(m, chatID, "removed")),
+				)
+			}
+
+			return nil
+		}
 	}
 
-	utils.RemoveChatAdmin(p.Client, chatID, p.UserID())
+	return nil
 }
 
 func handleSudoJoin(p *telegram.ParticipantUpdate, chatID int64) {
@@ -247,6 +222,45 @@ func handleSudoJoin(p *telegram.ParticipantUpdate, chatID int64) {
 	})
 
 	p.Client.SendMessage(chatID, text)
+}
+
+func handleAssistantRestriction(
+	p *telegram.ParticipantUpdate,
+	s *core.ChatState,
+	chatID int64,
+) {
+
+	if !isTrueBan(p) {
+
+		s.SetAssistantPresent(true)
+		s.SetAssistantBanned(false)
+
+		gologging.Debug("Assistant muted in " + utils.IntToStr(chatID))
+
+		return
+	}
+
+	gologging.Debug("Assistant banned in " + utils.IntToStr(chatID))
+
+	s.SetAssistantPresent(false)
+
+	core.DeleteRoom(chatID)
+
+	if ok, _ := p.Unban(); ok {
+
+		s.SetAssistantBanned(false)
+
+	} else {
+
+		s.SetAssistantBanned(true)
+
+		msg := F(chatID, "assistant_restricted_warning", locales.Arg{
+			"assistant": utils.MentionHTML(s.Assistant.User),
+			"id":        s.Assistant.User.ID,
+		})
+
+		p.Client.SendMessage(chatID, msg)
+	}
 }
 
 func isTrueBan(p *telegram.ParticipantUpdate) bool {
@@ -275,80 +289,26 @@ func isUserRestricted(p *telegram.ParticipantUpdate) bool {
 	return banned || left
 }
 
-func notifyAssistantRestricted(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
-
-	msg := F(chatID, "assistant_restricted_warning", locales.Arg{
-		"assistant": utils.MentionHTML(s.Assistant.User),
-		"id":        s.Assistant.User.ID,
-	})
-
-	if _, err := p.Client.SendMessage(chatID, msg); err != nil {
-		gologging.Error("Failed to send restriction warning: " + err.Error())
-	}
-}
-
-func logBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
-
-	if config.LoggerID == 0 || !isLogger() {
-		return
-	}
-
-	msg := F(
-		config.LoggerID,
-		"logger_bot_added",
-		buildLogArgs(p, chatID, "added"),
-	)
-
-	if _, err := p.Client.SendMessage(config.LoggerID, msg); err != nil {
-		gologging.Error("Failed to send logger_bot_added: " + err.Error())
-	}
-}
-
-func logBotLeave(p *telegram.ParticipantUpdate, chatID int64) {
-
-	if config.LoggerID == 0 || !isLogger() {
-		return
-	}
-
-	msg := F(
-		config.LoggerID,
-		"logger_bot_removed",
-		buildLogArgs(p, chatID, "removed"),
-	)
-
-	if _, err := p.Client.SendMessage(config.LoggerID, msg); err != nil {
-		gologging.Error("Failed to send logger_bot_removed: " + err.Error())
-	}
-}
-
-func buildLogArgs(
-	p *telegram.ParticipantUpdate,
-	chatID int64,
-	action string,
-) locales.Arg {
+func buildLogArgs(m *telegram.NewMessage, chatID int64, action string) locales.Arg {
 
 	groupUsername := "N/A"
-	if u := p.Channel.Username; u != "" {
+	if u := m.Channel.Username; u != "" {
 		groupUsername = "@" + u
 	}
 
-	actorUsername := utils.MentionHTML(p.Actor)
-	if u := p.Actor.Username; u != "" {
+	actorUsername := utils.MentionHTML(m.From)
+	if u := m.From.Username; u != "" {
 		actorUsername = "@" + u
 	}
 
-	actorName := strings.TrimSpace(p.Actor.FirstName + " " + p.Actor.LastName)
+	name := strings.TrimSpace(m.From.FirstName + " " + m.From.LastName)
 
 	return locales.Arg{
-		"group_name":            p.Channel.Title,
+		"group_name":            m.Channel.Title,
 		"group_id":              chatID,
 		"group_username":        groupUsername,
-		action + "_by_name":     actorName,
-		action + "_by_id":       p.ActorID(),
+		action + "_by_name":     name,
+		action + "_by_id":       m.FromID(),
 		action + "_by_username": actorUsername,
 		"date_time":             time.Now().Format("02 Jan 2006 • 15:04"),
 	}
