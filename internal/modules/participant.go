@@ -163,7 +163,7 @@ func handleChatAction(m *telegram.NewMessage) error {
 
 				gologging.Debug("Bot added to " + utils.IntToStr(chatID))
 
-				m.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
+				m.Reply(F(chatID, "bot_added_normal"))
 
 				database.AddServed(chatID)
 
