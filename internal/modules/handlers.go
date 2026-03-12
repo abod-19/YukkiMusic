@@ -486,6 +486,7 @@ func Init(bot *telegram.Client, assistants *core.AssistantManager) {
 	bot.On("edit:/ev", evalCommandHandler).SetGroup(80)
 
 	bot.On("participant", handleParticipantUpdate).SetGroup(70)
+	bot.On("action", handleChatAction).SetGroup(70)
 
 	bot.AddActionHandler(handleActions).SetGroup(60)
 
