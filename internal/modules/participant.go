@@ -297,7 +297,7 @@ func buildLogArgs(m *telegram.NewMessage, chatID int64, action string) locales.A
 	}
 
 	actorUsername := utils.MentionHTML(m.Sender)
-	if u := m.From.Username; u != "" {
+	if u := m.Sender.Username; u != "" {
 		actorUsername = "@" + u
 	}
 
