@@ -301,7 +301,7 @@ flood_minutes: "⏳ Please wait {duration} minutes before using this command aga
 help_private_only: "🤖 Hi! For bot help and commands, please DM me directly — I'm more responsive in private chats!"
 help_main: "📚 <b>Help Menu</b>\n\nSelect a category below to explore detailed commands and their usage for managing, controlling, and customizing the bot."
 
-jump_no_active: "⚠️ <b>No active track to jump within.</b>"
+jump_no_active: "⚠️ No active track to jump within."
 jump_usage: "⚠️ Please provide seconds.\nExample: <code>{cmd} 120</code>"
 jump_invalid_position: "⚠️ Invalid position.\nExample: <code>{cmd} 120</code>"
 jump_too_close_end: "⚠️ Cannot jump to <b>{position}</b> — that’s too close to the end of the track."
@@ -522,7 +522,7 @@ position_now: |
   ⚙️ Speed: <b>{speed}x</b>
 
 queue_limit_reached: "⚠️ Queue limit reached ({limit} tracks max). Use /clear to clear queue."
-queue_no_active: "⚠️ <b>No active playback.</b>\nNothing is queued right now."
+queue_no_active: "⚠️ <b>No active playback.</b>\n\n<i>Nothing is queued right now.</i>"
 queue_header: "🎶 <b>Current Queue</b>"
 queue_now_playing: "▶️ <b>Now Playing:</b>"
 queue_up_next: "⏭️ <b>Up Next:</b>"
