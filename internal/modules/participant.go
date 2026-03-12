@@ -34,7 +34,29 @@ import (
 	"main/internal/utils"
 )
 
-// TODO: Bot added/kicked logger not working inspect or switch to ChatAddUser
+func getParticipantStatus(p telegram.ChannelParticipant) string {
+	if p == nil {
+		return "left"
+	}
+
+	switch v := p.(type) {
+	case *telegram.ChannelParticipantCreator:
+		return "creator"
+	case *telegram.ChannelParticipantAdmin:
+		return "administrator"
+	case *telegram.ChannelParticipantSelf, *telegram.ChannelParticipantObj:
+		return "member"
+	case *telegram.ChannelParticipantLeft:
+		return "left"
+	case *telegram.ChannelParticipantBanned:
+		if v.Left {
+			return "left"
+		}
+		return "kicked"
+	default:
+		return "unknown"
+	}
+}
 
 func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 	if isMaintenanceBlocked(p.ActorID()) {
@@ -54,48 +76,56 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 
 	userID := p.UserID()
 
+	oldStatus := getParticipantStatus(p.Old)
+	newStatus := getParticipantStatus(p.New)
+
 	switch {
-	case userID == core.BUser.ID:
-		handleBotEvent(p, state, chatID)
-	case state != nil && userID == state.Assistant.User.ID:
+
+	case (newStatus == "administrator" || newStatus == "creator") &&
+		(oldStatus != "administrator" && oldStatus != "creator"):
+
+		gologging.DebugF("user %d promoted in %d", userID, chatID)
+		utils.AddChatAdmin(p.Client, chatID, userID)
+
+	case oldStatus == "administrator" &&
+		newStatus != "administrator" &&
+		newStatus != "creator":
+
+		gologging.DebugF("user %d demoted in %d", userID, chatID)
+		handleDemotion(p, state, chatID)
+
+	case (oldStatus == "left" || oldStatus == "kicked") &&
+		(newStatus == "member" || newStatus == "administrator" || newStatus == "creator"):
+
+		if userID == p.Client.Me().ID {
+			handleBotJoin(p, chatID)
+		}
+
+		handleSudoJoin(p, chatID)
+
+	case (oldStatus == "member" || oldStatus == "administrator") &&
+		newStatus == "left":
+
+		if userID == core.BUser.ID {
+			handleBotLeave(p, state, chatID)
+		}
+
+	case newStatus == "kicked":
+
+		if userID == core.BUser.ID {
+			handleBotLeave(p, state, chatID)
+		}
+	}
+
+	if state != nil && userID == state.Assistant.User.ID {
 		handleAssistantEvent(p, state, chatID)
-	default:
-		handleOtherUserEvent(p, state, chatID)
 	}
 
 	return nil
 }
 
-// =============================================================================
-// BOT EVENT HANDLERS
-// =============================================================================
-
-func handleBotEvent(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
-	if p.IsAdded() {
-		handleBotJoin(p, chatID)
-		return
-	}
-
-	if isUserPresent(p) {
-		return
-	}
-
-	handleBotLeave(p, s, chatID)
-}
-
 func handleBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
-	if isMaintenanceBlocked(p.ActorID()) {
-		sendMaintenanceNotice(p, chatID)
-		p.Client.LeaveChannel(chatID)
-		return
-	}
-
 	gologging.Debug("Bot added to " + utils.IntToStr(chatID))
-
 	p.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
 	database.AddServed(chatID)
 	logBotJoin(p, chatID)
@@ -106,8 +136,8 @@ func handleBotLeave(
 	s *core.ChatState,
 	chatID int64,
 ) {
-	action := getLeaveAction(p)
-	gologging.Debug("Bot " + action + " from chat " + utils.IntToStr(chatID))
+
+	gologging.Debug("Bot left from chat " + utils.IntToStr(chatID))
 
 	if s != nil && s.Assistant != nil {
 		s.Assistant.Client.LeaveChannel(chatID)
@@ -120,15 +150,12 @@ func handleBotLeave(
 	logBotLeave(p, chatID)
 }
 
-// =============================================================================
-// ASSISTANT EVENT HANDLERS
-// =============================================================================
-
 func handleAssistantEvent(
 	p *telegram.ParticipantUpdate,
 	s *core.ChatState,
 	chatID int64,
 ) {
+
 	if p.IsJoined() {
 		s.SetAssistantPresent(true)
 		s.SetAssistantBanned(false)
@@ -156,6 +183,7 @@ func handleAssistantRestriction(
 	s *core.ChatState,
 	chatID int64,
 ) {
+
 	if !isTrueBan(p) {
 		s.SetAssistantPresent(true)
 		s.SetAssistantBanned(false)
@@ -175,42 +203,24 @@ func handleAssistantRestriction(
 	}
 }
 
-// =============================================================================
-// OTHER USER EVENT HANDLERS
-// =============================================================================
-
-func handleOtherUserEvent(
-	p *telegram.ParticipantUpdate,
-	s *core.ChatState,
-	chatID int64,
-) {
-	if p.IsPromoted() {
-		utils.AddChatAdmin(p.Client, chatID, p.UserID())
-	}
-
-	if p.IsDemoted() {
-		handleDemotion(p, s, chatID)
-	}
-
-	if p.IsJoined() {
-		handleSudoJoin(p, chatID)
-	}
-}
-
 func handleDemotion(
 	p *telegram.ParticipantUpdate,
 	s *core.ChatState,
 	chatID int64,
 ) {
+
 	if p.UserID() == core.BUser.ID && config.LeaveOnDemoted {
+
 		core.DeleteRoom(chatID)
 		core.DeleteChatState(chatID)
+
 		p.Client.SendMessage(chatID, F(chatID, "bot_demotion_goodbye"))
 		p.Client.LeaveChannel(chatID)
 
 		if s != nil && s.Assistant != nil {
 			s.Assistant.Client.LeaveChannel(chatID)
 		}
+
 		return
 	}
 
@@ -218,6 +228,7 @@ func handleDemotion(
 }
 
 func handleSudoJoin(p *telegram.ParticipantUpdate, chatID int64) {
+
 	var msgKey string
 
 	if p.UserID() == config.OwnerID {
@@ -236,11 +247,8 @@ func handleSudoJoin(p *telegram.ParticipantUpdate, chatID int64) {
 	p.Client.SendMessage(chatID, text)
 }
 
-// =============================================================================
-// DETECTION FUNCTIONS
-// =============================================================================
-
 func isTrueBan(p *telegram.ParticipantUpdate) bool {
+
 	if p.New == nil {
 		return false
 	}
@@ -250,37 +258,19 @@ func isTrueBan(p *telegram.ParticipantUpdate) bool {
 		return false
 	}
 
-	// ViewMessages=true means actually banned (can't access chat)
-	// ViewMessages=false means muted (can access but restricted)
 	return banned.BannedRights.ViewMessages
 }
 
-func isUserPresent(p *telegram.ParticipantUpdate) bool {
-	if p.IsLeft() || p.IsBanned() || p.IsKicked() {
-		return false
-	}
-	return p.New == nil || !isUserRestricted(p)
-}
-
 func isUserRestricted(p *telegram.ParticipantUpdate) bool {
+
 	if p.New == nil {
 		return false
 	}
 
 	_, banned := p.New.(*telegram.ChannelParticipantBanned)
 	_, left := p.New.(*telegram.ChannelParticipantLeft)
+
 	return banned || left
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-func getLeaveAction(p *telegram.ParticipantUpdate) string {
-	if p.IsLeft() {
-		return "left"
-	}
-	return "removed"
 }
 
 func notifyAssistantRestricted(
@@ -288,9 +278,6 @@ func notifyAssistantRestricted(
 	s *core.ChatState,
 	chatID int64,
 ) {
-	if isMaintenanceBlocked(p.ActorID()) {
-		return
-	}
 
 	msg := F(chatID, "assistant_restricted_warning", locales.Arg{
 		"assistant": utils.MentionHTML(s.Assistant.User),
@@ -302,21 +289,8 @@ func notifyAssistantRestricted(
 	}
 }
 
-func sendMaintenanceNotice(p *telegram.ParticipantUpdate, chatID int64) {
-	msg := F(chatID, "bot_added_maintenance")
-	if reason, err := database.GetMaintReason(); err == nil && reason != "" {
-		msg += "\n\n" + F(chatID, "maint_reason_generic",
-			locales.Arg{"reason": reason})
-	}
-
-	p.Client.SendMessage(chatID, msg)
-}
-
-// =============================================================================
-// LOGGING
-// =============================================================================
-
 func logBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
+
 	if config.LoggerID == 0 || !isLogger() {
 		return
 	}
@@ -326,12 +300,14 @@ func logBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
 		"logger_bot_added",
 		buildLogArgs(p, chatID, "added"),
 	)
+
 	if _, err := p.Client.SendMessage(config.LoggerID, msg); err != nil {
 		gologging.Error("Failed to send logger_bot_added: " + err.Error())
 	}
 }
 
 func logBotLeave(p *telegram.ParticipantUpdate, chatID int64) {
+
 	if config.LoggerID == 0 || !isLogger() {
 		return
 	}
@@ -341,6 +317,7 @@ func logBotLeave(p *telegram.ParticipantUpdate, chatID int64) {
 		"logger_bot_removed",
 		buildLogArgs(p, chatID, "removed"),
 	)
+
 	if _, err := p.Client.SendMessage(config.LoggerID, msg); err != nil {
 		gologging.Error("Failed to send logger_bot_removed: " + err.Error())
 	}
@@ -351,6 +328,7 @@ func buildLogArgs(
 	chatID int64,
 	action string,
 ) locales.Arg {
+
 	groupUsername := "N/A"
 	if u := p.Channel.Username; u != "" {
 		groupUsername = "@" + u
