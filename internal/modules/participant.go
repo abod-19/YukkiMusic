@@ -75,7 +75,7 @@ func handleBotEvent(
 	s *core.ChatState,
 	chatID int64,
 ) {
-	if p.IsJoined() {
+	if p.IsAdded() {
 		handleBotJoin(p, chatID)
 		return
 	}
@@ -93,6 +93,8 @@ func handleBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
 		p.Client.LeaveChannel(chatID)
 		return
 	}
+
+	gologging.Debug("Bot added to " + utils.IntToStr(chatID))
 
 	p.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
 	database.AddServed(chatID)
