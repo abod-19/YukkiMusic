@@ -148,6 +148,7 @@ func cclearHandler(m *tg.NewMessage) error {
 	return handleClear(m, true)
 }
 
+
 func handleQueue(m *tg.NewMessage, cplay bool) error {
 	chatID := m.ChannelID()
 
@@ -156,8 +157,8 @@ func handleQueue(m *tg.NewMessage, cplay bool) error {
 		m.Reply(err.Error())
 		return tg.ErrEndGroup
 	}
-	t := r.Track()
 
+	t := r.Track()
 	if !r.IsActiveChat() || t == nil {
 		m.Reply(F(chatID, "queue_no_active"))
 		return tg.ErrEndGroup
@@ -168,38 +169,95 @@ func handleQueue(m *tg.NewMessage, cplay bool) error {
 	b.WriteString(F(chatID, "queue_header"))
 	b.WriteString("\n\n")
 
-	// Now Playing
 	b.WriteString(F(chatID, "queue_now_playing"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(
+
+	fmt.Fprintf(
+		&b,
 		"🎧 <a href=\"%s\">%s</a> — %s [%s]\n\n",
 		t.URL,
 		html.EscapeString(utils.ShortTitle(t.Title, 35)),
 		t.Requester,
 		formatDuration(t.Duration),
-	))
+	)
 
-	// Up Next
-	if len(r.Queue()) > 0 {
+	queue := r.Queue()
+	q := len(queue)
+
+	if q > 0 {
 		b.WriteString(F(chatID, "queue_up_next"))
 		b.WriteString("\n\n")
 
-		for i, track := range r.Queue() {
+		useQuote := q >= 3
+		if useQuote {
+			b.WriteString("<blockquote>")
+		}
+
+		for i, track := range queue {
 			if i >= 10 {
-				b.WriteString(F(chatID, "queue_more_line", locales.Arg{
-					"remaining": len(r.Queue()) - 10,
-				}))
 				break
 			}
 
-			b.WriteString(fmt.Sprintf(
+			fmt.Fprintf(
+				&b,
 				"%d. 🎵 <a href=\"%s\">%s</a> — %s [%s]\n",
 				i+1,
 				track.URL,
 				html.EscapeString(utils.ShortTitle(track.Title, 35)),
 				track.Requester,
 				formatDuration(track.Duration),
-			))
+			)
+		}
+
+		if useQuote {
+			b.WriteString("</blockquote>")
+		}
+
+		if q > 10 {
+			var full strings.Builder
+
+			full.WriteString(F(chatID, "queue_header"))
+			full.WriteString("\n\n")
+
+			full.WriteString(F(chatID, "queue_now_playing"))
+			full.WriteString("\n")
+
+			fmt.Fprintf(
+				&full,
+				"🎧 %s — %s [%s]\n\n",
+				t.Title,
+				t.Requester,
+				formatDuration(t.Duration),
+			)
+
+			full.WriteString(F(chatID, "queue_up_next"))
+			full.WriteString("\n\n")
+
+			for i, track := range queue {
+				fmt.Fprintf(
+					&full,
+					"%d. %s — %s [%s]\n",
+					i+1,
+					track.Title,
+					track.Requester,
+					formatDuration(track.Duration),
+				)
+			}
+
+			link, err := utils.CreatePaste(full.String())
+			remaining := q - 10
+
+			if err == nil && link != "" {
+				more := fmt.Sprintf("<a href=\"%s\">%d</a>", link, remaining)
+
+				b.WriteString(F(chatID, "queue_more_line", locales.Arg{
+					"remaining": more,
+				}))
+			} else {
+				b.WriteString(F(chatID, "queue_more_line", locales.Arg{
+					"remaining": remaining,
+				}))
+			}
 		}
 	} else {
 		b.WriteString(F(chatID, "queue_empty_tail"))
@@ -208,6 +266,7 @@ func handleQueue(m *tg.NewMessage, cplay bool) error {
 	m.Reply(b.String())
 	return tg.ErrEndGroup
 }
+
 
 func handleRemove(m *tg.NewMessage, cplay bool) error {
 	chatID := m.ChannelID()
