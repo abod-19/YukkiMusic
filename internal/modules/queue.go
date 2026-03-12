@@ -148,7 +148,6 @@ func cclearHandler(m *tg.NewMessage) error {
 	return handleClear(m, true)
 }
 
-
 func handleQueue(m *tg.NewMessage, cplay bool) error {
 	chatID := m.ChannelID()
 
@@ -266,7 +265,6 @@ func handleQueue(m *tg.NewMessage, cplay bool) error {
 	m.Reply(b.String())
 	return tg.ErrEndGroup
 }
-
 
 func handleRemove(m *tg.NewMessage, cplay bool) error {
 	chatID := m.ChannelID()

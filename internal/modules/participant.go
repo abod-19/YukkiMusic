@@ -59,7 +59,6 @@ func getParticipantStatus(p telegram.ChannelParticipant) string {
 }
 
 func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
-
 	if isMaintenanceBlocked(p.ActorID()) {
 		return nil
 	}
@@ -80,7 +79,12 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 	oldStatus := getParticipantStatus(p.Old)
 	newStatus := getParticipantStatus(p.New)
 
-	gologging.DebugF("participant change %d: %s -> %s", userID, oldStatus, newStatus)
+	gologging.DebugF(
+		"participant change %d: %s -> %s",
+		userID,
+		oldStatus,
+		newStatus,
+	)
 
 	switch {
 
@@ -135,7 +139,8 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 			return nil
 		}
 
-		if state.GetAssistantPresence() == nil || state.GetAssistantBanned() == nil {
+		if state.GetAssistantPresence() == nil ||
+			state.GetAssistantBanned() == nil {
 			state.RefreshAssistantState()
 		}
 	}
@@ -144,7 +149,6 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 }
 
 func handleChatAction(m *telegram.NewMessage) error {
-
 	if !isValidChatType(m) {
 		warnAndLeave(m.Client, m.ChannelID())
 		return telegram.ErrEndGroup
@@ -158,7 +162,6 @@ func handleChatAction(m *telegram.NewMessage) error {
 	case *telegram.MessageActionChatAddUser:
 
 		for _, uid := range action.Users {
-
 			if uid == botID {
 
 				gologging.Debug("Bot added to " + utils.IntToStr(chatID))
@@ -168,7 +171,6 @@ func handleChatAction(m *telegram.NewMessage) error {
 				database.AddServed(chatID)
 
 				if config.LoggerID != 0 {
-
 					m.Client.SendMessage(
 						config.LoggerID,
 						F(config.LoggerID, "logger_bot_added", buildLogArgs(m, chatID, "added")),
@@ -190,7 +192,6 @@ func handleChatAction(m *telegram.NewMessage) error {
 			database.DeleteServed(chatID)
 
 			if config.LoggerID != 0 {
-
 				m.Client.SendMessage(
 					config.LoggerID,
 					F(config.LoggerID, "logger_bot_removed", buildLogArgs(m, chatID, "removed")),
@@ -205,7 +206,6 @@ func handleChatAction(m *telegram.NewMessage) error {
 }
 
 func handleSudoJoin(p *telegram.ParticipantUpdate, chatID int64) {
-
 	var msgKey string
 
 	if p.UserID() == config.OwnerID {
@@ -229,7 +229,6 @@ func handleAssistantRestriction(
 	s *core.ChatState,
 	chatID int64,
 ) {
-
 	if !isTrueBan(p) {
 
 		s.SetAssistantPresent(true)
@@ -247,9 +246,7 @@ func handleAssistantRestriction(
 	core.DeleteRoom(chatID)
 
 	if ok, _ := p.Unban(); ok {
-
 		s.SetAssistantBanned(false)
-
 	} else {
 
 		s.SetAssistantBanned(true)
@@ -264,7 +261,6 @@ func handleAssistantRestriction(
 }
 
 func isTrueBan(p *telegram.ParticipantUpdate) bool {
-
 	if p.New == nil {
 		return false
 	}
@@ -278,7 +274,6 @@ func isTrueBan(p *telegram.ParticipantUpdate) bool {
 }
 
 func isUserRestricted(p *telegram.ParticipantUpdate) bool {
-
 	if p.New == nil {
 		return false
 	}
@@ -289,8 +284,11 @@ func isUserRestricted(p *telegram.ParticipantUpdate) bool {
 	return banned || left
 }
 
-func buildLogArgs(m *telegram.NewMessage, chatID int64, action string) locales.Arg {
-
+func buildLogArgs(
+	m *telegram.NewMessage,
+	chatID int64,
+	action string,
+) locales.Arg {
 	groupUsername := "N/A"
 	if u := m.Channel.Username; u != "" {
 		groupUsername = "@" + u

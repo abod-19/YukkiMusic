@@ -40,25 +40,24 @@ func GetProgress(mystic *telegram.NewMessage) *telegram.ProgressManager {
 	}
 
 	pm.WithCallback(func(pi *telegram.ProgressInfo) {
-    text := fmt.Sprintf(
-        "<b>📥 Downloading your track...</b>\n"+
-            "<pre>"+
-            "Progress : %6.2f%%\n"+
-            "Speed    : %s\n"+
-            "Eta      : %s\n"+
-            "Elapsed  : %s"+
-            "</pre>",
-        pi.Percentage,
-        pi.SpeedString(),
-        pi.ETAString(),
-        pi.ElapsedString(),
-    )
-    mystic.Edit(text, opts)
-})
+		text := fmt.Sprintf(
+			"<b>📥 Downloading your track...</b>\n"+
+				"<pre>"+
+				"Progress : %6.2f%%\n"+
+				"Speed    : %s\n"+
+				"Eta      : %s\n"+
+				"Elapsed  : %s"+
+				"</pre>",
+			pi.Percentage,
+			pi.SpeedString(),
+			pi.ETAString(),
+			pi.ElapsedString(),
+		)
+		mystic.Edit(text, opts)
+	})
 
 	return pm
 }
-
 
 func GetProgressBar(playedSec, durationSec int) string {
 	if durationSec == 0 || playedSec <= 0 {
@@ -69,7 +68,7 @@ func GetProgressBar(playedSec, durationSec int) string {
 	umm := math.Floor(percentage)
 
 	var bar string
-    
+
 	switch {
 	case umm >= 0 && umm <= 10:
 		bar = "◉—————————"

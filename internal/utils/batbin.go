@@ -24,6 +24,7 @@ package utils
 import (
 	"fmt"
 
+	"github.com/Laky-64/gologging"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -43,7 +44,6 @@ func CreatePaste(content string) (string, error) {
 		SetBody(content).
 		SetResult(&result).
 		Post(batbinBaseURL + "api/v2/paste")
-
 	if err != nil {
 		gologging.Error("batbin request error: " + err.Error())
 		return "", err
