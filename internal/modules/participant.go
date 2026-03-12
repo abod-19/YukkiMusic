@@ -59,6 +59,7 @@ func getParticipantStatus(p telegram.ChannelParticipant) string {
 }
 
 func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
+
 	if isMaintenanceBlocked(p.ActorID()) {
 		return nil
 	}
@@ -79,6 +80,13 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 	oldStatus := getParticipantStatus(p.Old)
 	newStatus := getParticipantStatus(p.New)
 
+	gologging.DebugF(
+		"participant change %d: %s -> %s",
+		userID,
+		oldStatus,
+		newStatus,
+	)
+
 	switch {
 
 	case (newStatus == "administrator" || newStatus == "creator") &&
@@ -94,8 +102,7 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 		gologging.DebugF("user %d demoted in %d", userID, chatID)
 		handleDemotion(p, state, chatID)
 
-	case (oldStatus == "left" || oldStatus == "kicked") &&
-		(newStatus == "member" || newStatus == "administrator" || newStatus == "creator"):
+	case oldStatus == "left" && newStatus == "member":
 
 		if userID == p.Client.Me().ID {
 			handleBotJoin(p, chatID)
@@ -123,7 +130,6 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 
 	return nil
 }
-
 func handleBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
 	gologging.Debug("Bot added to " + utils.IntToStr(chatID))
 	p.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
