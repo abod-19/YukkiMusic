@@ -89,6 +89,22 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 
 	switch {
 
+	case oldStatus == "left" &&
+		(newStatus == "member" || newStatus == "administrator" || newStatus == "creator"):
+
+		if userID == p.Client.Me().ID {
+			handleBotJoin(p, chatID)
+		}
+
+		handleSudoJoin(p, chatID)
+
+	case (oldStatus == "member" || oldStatus == "administrator" || oldStatus == "creator") &&
+		(newStatus == "left" || newStatus == "kicked"):
+
+		if userID == core.BUser.ID {
+			handleBotLeave(p, state, chatID)
+		}
+
 	case (newStatus == "administrator" || newStatus == "creator") &&
 		(oldStatus != "administrator" && oldStatus != "creator"):
 
@@ -101,27 +117,6 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 
 		gologging.DebugF("user %d demoted in %d", userID, chatID)
 		handleDemotion(p, state, chatID)
-
-	case oldStatus == "left" && newStatus == "member":
-
-		if userID == p.Client.Me().ID {
-			handleBotJoin(p, chatID)
-		}
-
-		handleSudoJoin(p, chatID)
-
-	case (oldStatus == "member" || oldStatus == "administrator") &&
-		newStatus == "left":
-
-		if userID == core.BUser.ID {
-			handleBotLeave(p, state, chatID)
-		}
-
-	case newStatus == "kicked":
-
-		if userID == core.BUser.ID {
-			handleBotLeave(p, state, chatID)
-		}
 	}
 
 	if state != nil && userID == state.Assistant.User.ID {
@@ -130,6 +125,7 @@ func handleParticipantUpdate(p *telegram.ParticipantUpdate) error {
 
 	return nil
 }
+
 func handleBotJoin(p *telegram.ParticipantUpdate, chatID int64) {
 	gologging.Debug("Bot added to " + utils.IntToStr(chatID))
 	p.Client.SendMessage(chatID, F(chatID, "bot_added_normal"))
