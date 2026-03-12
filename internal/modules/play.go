@@ -649,7 +649,7 @@ func playTracksAndRespond(
 			}
 
 			addedText := F(chatID, "play_added_to_queue_single", locales.Arg{
-				"index": len(r.Queue())+ 1,
+				"index": len(r.Queue()),
 				"url":      mainTrack.URL,
 				"title":    title,
 				"duration": formatDuration(mainTrack.Duration),
