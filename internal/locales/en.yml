@@ -210,7 +210,7 @@ bug_report_format: |
   <pre>{report}</pre>
   
 clear_no_active: "⚠️ <b>No active playback or queue to clear.</b>"
-clear_success: "✅ The queue has been cleared by {user}.\n<i>(You can restore it using <code>/{cmd}</code> before adding new songs)</i>"
+clear_success: "✅ The queue has been cleared by {user}.\n<i>You can restore it using <code>/{cmd}</code> before adding new songs</i>"
 
 err_assistant_banned: |
   <b>🚫 Assistant Restricted</b>
