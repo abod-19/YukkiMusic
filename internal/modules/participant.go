@@ -296,19 +296,19 @@ func buildLogArgs(m *telegram.NewMessage, chatID int64, action string) locales.A
 		groupUsername = "@" + u
 	}
 
-	actorUsername := utils.MentionHTML(m.From)
+	actorUsername := utils.MentionHTML(m.Sender)
 	if u := m.From.Username; u != "" {
 		actorUsername = "@" + u
 	}
 
-	name := strings.TrimSpace(m.From.FirstName + " " + m.From.LastName)
+	name := strings.TrimSpace(m.Sender.FirstName + " " + m.Sender.LastName)
 
 	return locales.Arg{
 		"group_name":            m.Channel.Title,
 		"group_id":              chatID,
 		"group_username":        groupUsername,
 		action + "_by_name":     name,
-		action + "_by_id":       m.FromID(),
+		action + "_by_id":       m.SenderID(),
 		action + "_by_username": actorUsername,
 		"date_time":             time.Now().Format("02 Jan 2006 • 15:04"),
 	}
